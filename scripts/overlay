@@ -1,0 +1,70 @@
+#!/usr/bin/env python
+"""overlay: Merging directories like a champ!
+
+If <src> <overlay> and <dest> is provided these will override any values in the
+config files.
+
+Usage:
+    overlay.py (-h | --help)
+    overlay.py build [--config=FILES] [--clean]
+    overlay.py build <src> <overlay> <dest> [--config=FILES] [--clean]
+
+Options:
+    -h --help          Show help
+    --config=FILE      Comma-separated list of config-files[default: ]
+    --clean            Clean build
+
+"""
+import os
+import sys
+from docopt import docopt
+from ConfigParser import (
+    SafeConfigParser,
+    NoSectionError,
+    NoOptionError,
+)
+from overlay import (
+    build,
+    ConfigError,
+    TemplateError,
+    DEFAULT_CONFIG,
+    __version__,
+)
+
+
+if __name__ == '__main__':
+    arguments = docopt(__doc__,
+                       version='{0}s {1}s'.format(__name__,
+                                                  '.'.join(str(i) for i
+                                                           in __version__)))
+    # Read config
+    # Each config will have access to the special variable 'here', which is the
+    # directory where overlay is run from
+    default_config = DEFAULT_CONFIG.copy()
+    default_config.update({'here': os.getcwd()})
+    config = SafeConfigParser(default_config)
+    if not arguments['--config'] and not arguments['<src>']:
+        sys.exit('Error: A configuration file must be supplied.')
+    if not config.has_section('build'):
+        config.add_section('build')
+    for a in ('<src>', '<overlay>', '<dest>'):
+        if arguments[a]:
+            config.set('build', a.strip('<>'), arguments[a])
+
+    for p in os.path.expanduser(arguments['--config']).split(','):
+        if p and not os.path.isfile(p):
+            exit('Error: File missing - \'{0}\''.format(p))
+
+    config.read(p for p in
+                os.path.expanduser(arguments['--config']).split(','))
+
+    # Run
+    if arguments['build']:
+        try:
+            build_dir = build(config, arguments.get('--clean', False))
+            print "Build done in '{0}'.".format(build_dir)
+            exit(0)
+        except (ConfigError, NoSectionError, NoOptionError), e:
+            exit('Configuration Error: {0}.'.format(e))
+        except TemplateError, e:
+            exit('Template Error: {0}.'.format(e))
